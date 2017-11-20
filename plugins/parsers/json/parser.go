@@ -35,30 +35,31 @@ func (p *JSONParser) parseArray(buf []byte) ([]telegraf.Metric, error) {
 
 func (p *JSONParser) parseObject(metrics []telegraf.Metric, jsonOut map[string]interface{}) ([]telegraf.Metric, error) {
 
+	name := jsonOut["name"].(string)
+
+	fields := jsonOut["fields"].(map[string]interface{})
+
 	tags := make(map[string]string)
-	for k, v := range p.DefaultTags {
-		tags[k] = v
-	}
-
-	for _, tag := range p.TagKeys {
-		switch v := jsonOut[tag].(type) {
+	for key, v := range jsonOut["tags"].(map[string]interface{}) {
+		switch value := v.(type) {
 		case string:
-			tags[tag] = v
+			tags[key] = value
 		case bool:
-			tags[tag] = strconv.FormatBool(v)
+			tags[key] = strconv.FormatBool(value)
 		case float64:
-			tags[tag] = strconv.FormatFloat(v, 'f', -1, 64)
+			tags[key] = strconv.FormatFloat(value, 'f', -1, 64)
 		}
-		delete(jsonOut, tag)
 	}
 
-	f := JSONFlattener{}
-	err := f.FlattenJSON("", jsonOut)
-	if err != nil {
-		return nil, err
+	var timestamp time.Time
+	if jsonOut["timestamp"] == nil {
+		timestamp = time.Now().UTC()
+	} else {
+		timestamp = time.Unix(int64(jsonOut["timestamp"].(float64)), 0)
 	}
 
-	metric, err := metric.New(p.MetricName, tags, f.Fields, time.Now().UTC())
+	metric, err := metric.New(name, tags, fields, timestamp)
+	fmt.Printf("metric: %T", metric)
 
 	if err != nil {
 		return nil, err
@@ -82,6 +83,7 @@ func (p *JSONParser) Parse(buf []byte) ([]telegraf.Metric, error) {
 		}
 		return p.parseObject(metrics, jsonOut)
 	}
+
 	return p.parseArray(buf)
 }
 
